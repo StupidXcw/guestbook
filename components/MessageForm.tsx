@@ -7,6 +7,7 @@ export default function MessageForm() {
   const [content, setContent] = useState("");
   const [preview, setPreview] = useState("");
   const [loading, setLoading] = useState(false);
+  const [sentence, setSentence] = useState(""); // ← 新增：一句话输入
 
   async function submit() {
     // ← 你的片段从这开始，原样放进来的部分全都不用改
@@ -25,6 +26,42 @@ export default function MessageForm() {
     }
     setLoading(false);
     // ← 片段到这结束
+  }
+
+  // ← 新增：AI 一句话添加
+  async function aiSubmit() {
+    setLoading(true);
+    try {
+      // 第一跳：AI 翻译
+      const parseRes = await fetch("/api/ai/parse", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: sentence }),
+      });
+      const parsed = await parseRes.json();
+      if (!parseRes.ok) {
+        setPreview(`失败：${parsed.error}`);
+        return;
+      }
+
+      // 第二跳：走原有落库接口（AI 不碰数据层）
+      const res = await fetch("/api/messages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: parsed.name, content: parsed.content }),
+      });
+      if (res.ok) {
+        setPreview(
+          `AI 已添加：[${parsed.name}] ${parsed.content}，刷新页面可见`,
+        );
+        setSentence("");
+      } else {
+        const { error } = await res.json();
+        setPreview(`失败：${error}`);
+      }
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
@@ -50,10 +87,29 @@ export default function MessageForm() {
         {loading ? "提交中…" : "提交"}
       </button>
       {preview && (
-        <p className={preview.startsWith("失败") ? "text-red-600" : "text-green-700"}>
+        <p
+          className={
+            preview.startsWith("失败") ? "text-red-600" : "text-green-700"
+          }
+        >
           {preview}
         </p>
       )}
+
+      {/* ↓ 新增 AI 通道 */}
+      <input
+        value={sentence}
+        onChange={(e) => setSentence(e.target.value)}
+        placeholder="或者用一句话：说今天天气不错，署名小明"
+        className="border rounded p-2 w-full"
+      />
+      <button
+        onClick={aiSubmit}
+        disabled={loading || !sentence.trim()}
+        className="border rounded p-2 disabled:opacity-50"
+      >
+        {loading ? "AI 处理中…" : "AI 添加"}
+      </button>
     </div>
   );
 }
