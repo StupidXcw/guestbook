@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { listMessages } from "@/lib/data";
 import MessageForm from "@/components/MessageForm";
+import AiSummary from "@/components/AiSummary";
 
 export default async function Home() {
   const messages = listMessages();
@@ -16,10 +17,16 @@ export default async function Home() {
         >
           <p className="font-medium">{m.name}</p>
           <p className="text-gray-700">{m.content}</p>
-          <p className="text-xs text-gray-400">{m.createdAt}</p>
+          <p className="text-xs text-gray-400">
+            {new Date(m.createdAt).toLocaleString("zh-CN", {
+              timeZone: "Asia/Shanghai",
+              hour12: false,
+            })}
+          </p>
         </Link>
       ))}
       <MessageForm />
+      <AiSummary />
     </main>
   );
 }
