@@ -1,7 +1,9 @@
 "use client"; // ① 别忘这行（第 4 步的知识）
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 
 export default function MessageForm() {
+  const router = useRouter();
   // ② 组件函数外壳——所有 Hook 必须在它里面
   const [name, setName] = useState(""); // ③ 三个 state 缺一不可
   const [content, setContent] = useState("");
@@ -20,6 +22,7 @@ export default function MessageForm() {
     if (res.ok) {
       setContent("");
       setPreview("留言成功！刷新页面可见");
+      router.refresh();
     } else {
       const { error } = await res.json();
       setPreview(`失败：${error}`);
@@ -55,6 +58,7 @@ export default function MessageForm() {
           `AI 已添加：[${parsed.name}] ${parsed.content}，刷新页面可见`,
         );
         setSentence("");
+        router.refresh();
       } else {
         const { error } = await res.json();
         setPreview(`失败：${error}`);
