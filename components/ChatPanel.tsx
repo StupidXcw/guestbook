@@ -44,7 +44,6 @@ export default function ChatPanel() {
         const { done, value } = await reader.read();
         if (done) break;
         reply += decoder.decode(value, { stream: true });
-        console.log(reply);
         setMessages([...history, { role: "assistant", content: reply }]);
       }
     } finally {

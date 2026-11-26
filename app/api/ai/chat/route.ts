@@ -1,7 +1,24 @@
 // app/api/ai/chat/route.ts
 import { NextResponse } from "next/server";
+import { requireLlmConfig } from "@/lib/llm";
+import { isRateLimited } from "@/lib/rateLimit";
 
 export async function POST(request: Request) {
+  // 0. 限流：同一 IP 一分钟最多 10 次（防 Key 被刷爆）
+  const ip =
+    request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "local";
+  if (isRateLimited(`ai:${ip}`)) {
+    return NextResponse.json(
+      { error: "请求太频繁，请一分钟后再试" },
+      { status: 429 },
+    );
+  }
+
+  // 1. LLM 配置检查（公共层，见 lib/llm.ts）
+  const llm = requireLlmConfig();
+  if (llm instanceof NextResponse) return llm;
+  const { baseUrl, apiKey, model } = llm;
+
   // 1. 拿用户发来的话
   const { message } = await request.json();
 
@@ -10,18 +27,19 @@ export async function POST(request: Request) {
   }
 
   // 2. 调 LLM（服务端，key 安全）
-  const res = await fetch(process.env.LLM_BASE_URL!, {
+  const res = await fetch(baseUrl, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${process.env.LLM_API_KEY}`,
+      Authorization: `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
-      model: process.env.LLM_MODEL,
+      model,
       messages: [
         {
           role: "system",
-          content: "你是一个简洁的助手，回答控制在两句话以内。",
+          content:
+            "你是「AI 留言板」的对话助手。回答简洁友好，控制在两句话以内；不确定的事情不要编造。",
         },
         { role: "user", content: message },
       ],

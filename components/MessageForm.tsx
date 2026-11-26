@@ -1,6 +1,7 @@
 "use client"; // ① 别忘这行（第 4 步的知识）
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { safeJson } from "@/lib/safeJson";
 
 export default function MessageForm() {
   const router = useRouter();
@@ -12,23 +13,26 @@ export default function MessageForm() {
   const [sentence, setSentence] = useState(""); // ← 新增：一句话输入
 
   async function submit() {
-    // ← 你的片段从这开始，原样放进来的部分全都不用改
     setLoading(true);
-    const res = await fetch("/api/messages", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, content }),
-    });
-    if (res.ok) {
-      setContent("");
-      setPreview("留言成功！刷新页面可见");
-      router.refresh();
-    } else {
-      const { error } = await res.json();
-      setPreview(`失败：${error}`);
+    try {
+      const res = await fetch("/api/messages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, content }),
+      });
+      const { ok, data, parseError } = await safeJson(res);
+      if (parseError || !ok) {
+        setPreview(
+          `失败：${(data.error as string) ?? (parseError ? "服务端返回异常" : "未知错误")}`,
+        );
+      } else {
+        setContent("");
+        setPreview("留言成功！");
+        router.refresh();
+      }
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
-    // ← 片段到这结束
   }
 
   // ← 新增：AI 一句话添加
@@ -41,27 +45,31 @@ export default function MessageForm() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text: sentence }),
       });
-      const parsed = await parseRes.json();
-      if (!parseRes.ok) {
-        setPreview(`失败：${parsed.error}`);
+      const parsed = await safeJson(parseRes);
+      if (parsed.parseError || !parsed.ok) {
+        setPreview(
+          `失败：${(parsed.data.error as string) ?? (parsed.parseError ? "AI 服务异常" : "未知错误")}`,
+        );
         return;
       }
+      const name = parsed.data.name as string;
+      const content = parsed.data.content as string;
 
       // 第二跳：走原有落库接口（AI 不碰数据层）
       const res = await fetch("/api/messages", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: parsed.name, content: parsed.content }),
+        body: JSON.stringify({ name, content }),
       });
-      if (res.ok) {
+      const saved = await safeJson(res);
+      if (saved.parseError || !saved.ok) {
         setPreview(
-          `AI 已添加：[${parsed.name}] ${parsed.content}，刷新页面可见`,
+          `失败：${(saved.data.error as string) ?? (saved.parseError ? "服务端返回异常" : "未知错误")}`,
         );
+      } else {
+        setPreview(`AI 已添加：[${name}] ${content}`);
         setSentence("");
         router.refresh();
-      } else {
-        const { error } = await res.json();
-        setPreview(`失败：${error}`);
       }
     } finally {
       setLoading(false);

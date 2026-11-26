@@ -1,7 +1,24 @@
 import { NextResponse } from "next/server";
+import { requireLlmConfig } from "@/lib/llm";
+import { isRateLimited } from "@/lib/rateLimit";
 import { listMessages } from "@/lib/data";
 
-export async function GET() {
+export async function GET(request: Request) {
+  // 0. 限流：同一 IP 一分钟最多 10 次（防 Key 被刷爆）
+  const ip =
+    request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "local";
+  if (isRateLimited(`ai:${ip}`)) {
+    return NextResponse.json(
+      { error: "请求太频繁，请一分钟后再试" },
+      { status: 429 },
+    );
+  }
+
+  // 1. LLM 配置检查（公共层，见 lib/llm.ts）
+  const llm = requireLlmConfig();
+  if (llm instanceof NextResponse) return llm;
+  const { baseUrl, apiKey, model } = llm;
+
   const messages = listMessages();
   // 1. 没留言就没得总结
   if (messages.length === 0) {
@@ -19,19 +36,19 @@ export async function GET() {
     .map((m, i) => `${i + 1}. [${m.name}] ${m.content}`)
     .join("\n");
 
-  const res = await fetch(process.env.LLM_BASE_URL!, {
+  const res = await fetch(baseUrl, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${process.env.LLM_API_KEY}`,
+      Authorization: `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
-      model: process.env.LLM_MODEL,
+      model,
       messages: [
         {
           role: "system",
           content:
-            "你是留言板分析师。根据用户给出的留言列表，输出 3 个要点：①留言者的整体情绪 ②大家聊的主题 ③一条给留言者的回复建议。每个要点一行，不超过 30 字。",
+            "你是「AI 留言板」的分析师。根据用户给出的留言列表，输出 3 个要点：① 留言者的整体情绪 ② 大家聊的主题 ③ 一条给留言者的回复建议。每个要点一行、不超过 30 字，除这 3 行外不要输出任何内容。",
         },
         {
           role: "user",

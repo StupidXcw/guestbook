@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { safeJson } from "@/lib/safeJson";
 
 export default function AiSummary() {
   const [summary, setSummary] = useState("");
@@ -10,11 +11,13 @@ export default function AiSummary() {
     setLoading(true);
     try {
       const res = await fetch("/api/ai/summary");
-      const data = await res.json();
-      if (!res.ok) {
-        setSummary(`出错了：${data.error}`);
+      const { ok, data, parseError } = await safeJson(res);
+      if (parseError || !ok) {
+        setSummary(
+          `出错了：${(data.error as string) ?? (parseError ? "服务端返回异常" : "未知错误")}`,
+        );
       } else {
-        setSummary(data.summary);
+        setSummary((data.summary as string) ?? "");
       }
     } finally {
       setLoading(false);
